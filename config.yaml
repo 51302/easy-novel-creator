@@ -1,0 +1,77 @@
+# MySQL Configuration File
+# MySQL 数据库配置文件
+
+mysql:
+  # MySQL 服务器地址
+  host: 127.0.0.1
+  
+  # MySQL 端口
+  port: 3306
+  
+  # MySQL 用户名
+  user: root
+  
+  # MySQL 密码
+  password: root
+  
+  # 数据库名称
+  database: auth_system
+  
+  # 字符集
+  charset: utf8mb4
+  
+  # 连接池配置
+  pool:
+    # 最小连接数
+    min_size: 1
+    # 最大连接数
+    max_size: 10
+    # 连接超时时间（秒）
+    timeout: 30
+    # 连接回收时间（秒）
+    recycle: 3600
+
+# 应用配置
+app:
+  # 应用名称
+  name: AI Novel Creator
+  # 应用版本
+  version: 1.0.0
+  # 调试模式
+  debug: true
+  
+  # 服务器配置
+  server:
+    host: 0.0.0.0
+    port: 8000
+
+# JWT 配置
+jwt:
+  # JWT 密钥（生产环境请修改）
+  secret_key: your-secret-key-change-in-production-2024
+  # JWT 算法
+  algorithm: HS256
+  # Token 过期时间（分钟）
+  access_token_expire_minutes: 60
+
+# CORS 配置
+cors:
+  # 允许的跨域来源
+  origins:
+    - http://localhost:3000
+    - http://127.0.0.1:3000
+    - http://localhost:8000
+    - http://127.0.0.1:8000
+  # 是否允许携带凭证
+  allow_credentials: true
+  # 允许的HTTP方法
+  allow_methods:
+    - GET
+    - POST
+    - PUT
+    - DELETE
+    - OPTIONS
+  # 允许的HTTP头
+  allow_headers:
+    - Content-Type
+    - Authorization
