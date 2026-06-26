@@ -164,10 +164,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
-
-    // 作品搜索
-    const searchInput = document.getElementById('chapterSearchInput');
-    if (searchInput) searchInput.addEventListener('input', () => renderChapterWorkList(searchInput.value));
 });
 
 // ====================== 从后端加载作品列表 ======================
@@ -211,19 +207,18 @@ function addWorkToChapterList(work) {
     renderChapterWorkList();
 }
 
-function renderChapterWorkList(filter = '') {
+function renderChapterWorkList() {
     const listEl = document.getElementById('chapterWorkList');
-    let filtered = filter ? createdWorks.filter(w => w.name.toLowerCase().includes(filter.toLowerCase())) : createdWorks;
-    if (filtered.length === 0) {
+    if (createdWorks.length === 0) {
         listEl.innerHTML = `<div class="chapter-empty-works">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
-            <p>${filter ? '未找到匹配作品' : '暂无作品'}</p>
-            <span>${filter ? '请尝试其他关键词' : '请先在「新建作品」中创建作品'}</span>
-            ${!filter ? '<button type="button" class="btn btn-sm btn-primary" style="margin-top:16px;" onclick="switchCreateTab(\'new-work\')">去新建作品</button>' : ''}
+            <p>暂无作品</p>
+            <span>请先在「新建作品」中创建作品</span>
+            <button type="button" class="btn btn-sm btn-primary" style="margin-top:16px;" onclick="switchCreateTab('new-work')">去新建作品</button>
         </div>`;
         return;
     }
-    listEl.innerHTML = filtered.map(w => `
+    listEl.innerHTML = createdWorks.map(w => `
         <div class="chapter-work-item" onclick="selectWork(${w.id}, '${w.novel_uuid}')">
             <div class="chapter-work-item-name">${escapeHtml(w.name)}</div>
             <div class="chapter-work-item-meta">
