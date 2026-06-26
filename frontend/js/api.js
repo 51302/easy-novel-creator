@@ -4,7 +4,7 @@
  */
 const API = (() => {
     // 后端地址（开发环境）
-    const BASE_URL = 'http://127.0.0.1:8000/api/v1';
+    const BASE_URL = 'http://127.0.0.1:8001/api/v1';
 
     // Token 管理
     const TOKEN_KEY = 'auth_token';
@@ -140,6 +140,23 @@ const API = (() => {
         /** 删除用户 */
         async deleteUser(userId) {
             return await request('DELETE', `/users/${userId}`);
+        },
+
+        // ====================== 作品 API ======================
+
+        /** 创建作品 */
+        async createNovel(data) {
+            return await request('POST', '/novels/create', data);
+        },
+
+        /** 获取我的作品列表 */
+        async listMyNovels() {
+            return await request('GET', '/novels/');
+        },
+
+        /** 获取作品详情 */
+        async getNovel(novelUuid) {
+            return await request('GET', `/novels/${novelUuid}`);
         },
 
         // 工具方法
