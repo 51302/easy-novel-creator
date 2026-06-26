@@ -325,11 +325,6 @@ function formatDate(dateStr) {
         container.innerHTML = html;
     }
 
-    // 新增用户按钮
-    document.getElementById('btnAddUser').addEventListener('click', () => {
-        window.location.href = 'index.html#register';
-    });
-
     // 编辑用户
     window.editUser = async function(userId) {
         try {

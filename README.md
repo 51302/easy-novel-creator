@@ -85,18 +85,42 @@ cors:
 
 ## 启动步骤
 
-### 1. 安装后端依赖
+### 1. 启动Docker服务
+
+使用Docker Compose启动所需的数据库服务：
+
+```bash
+# 启动 MySQL
+docker-compose -f backend/app/docker-compose/mysql-compose.yml up -d
+
+# 启动 Redis
+docker-compose -f backend/app/docker-compose/redis-compose.yml up -d
+
+# 启动 MongoDB
+docker-compose -f backend/app/docker-compose/mongodb-compose.yml up -d
+
+# 启动 Elasticsearch（可选）
+docker-compose -f backend/app/docker-compose/es-compose.yml up -d
+```
+
+**数据库连接信息：**
+- MySQL: `localhost:3306`, 用户名: `root`, 密码: `root`, 数据库: `auth_system`
+- Redis: `localhost:6379`, 密码: `novel123redis`
+- MongoDB: `localhost:27017`, 用户名: `admin`, 密码: `admin123`, 数据库: `novel_db`
+- Elasticsearch: `localhost:9200`, 密码: `novel123es`
+
+### 2. 安装后端依赖
 
 ```bash
 cd backend
 pip install -r requirements.txt
 ```
 
-### 2. 配置数据库
+### 3. 配置数据库
 
 确保MySQL已启动，并根据需要修改 `backend/app/conf/config.yaml` 中的数据库配置。
 
-### 3. 启动后端服务
+### 4. 启动后端服务
 
 **使用 uv 启动（推荐）：**
 

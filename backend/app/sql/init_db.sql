@@ -27,6 +27,26 @@ CREATE TABLE IF NOT EXISTS `users` (
     INDEX       `idx_status`  (`status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户表';
 
+-- 创建作品表 (novels)
+CREATE TABLE IF NOT EXISTS `novels` (
+    `id`           INT AUTO_INCREMENT PRIMARY KEY       COMMENT '作品自增ID',
+    `novel_uuid`   VARCHAR(36)  NOT NULL                COMMENT '作品唯一UUID',
+    `author_id`    INT          NOT NULL                COMMENT '作者用户ID',
+    `author_name`  VARCHAR(50)  NOT NULL                COMMENT '作者用户名',
+    `title`        VARCHAR(100) NOT NULL                COMMENT '书名/作品名称',
+    `novel_type`   VARCHAR(50)  DEFAULT NULL            COMMENT '作品类型/目标读者',
+    `tags`         TEXT         DEFAULT NULL            COMMENT '标签 (JSON字符串)',
+    `likes`        BIGINT       NOT NULL DEFAULT 0      COMMENT '点赞量',
+    `views`        BIGINT       NOT NULL DEFAULT 0      COMMENT '观看量/阅读量',
+    `comments`     BIGINT       NOT NULL DEFAULT 0      COMMENT '评论量',
+    `created_at`   DATETIME     DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at`   DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+
+    UNIQUE KEY `uk_novel_uuid` (`novel_uuid`),
+    INDEX       `idx_author_id` (`author_id`),
+    INDEX       `idx_created_at` (`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='作品表';
+
 -- 插入一个默认管理员用户（密码: admin123，bcrypt加密）
 -- 生产环境请务必修改密码！
 INSERT INTO `users` (`username`, `password`, `status`, `email`, `superuser`)

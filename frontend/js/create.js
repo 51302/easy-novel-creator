@@ -1,6 +1,6 @@
 /**
  * 创作页面 - 交互逻辑
- * 处理Tab切换、角色管理、标签管理、章节编辑等
+ * 处理Tab切换、角色管理、标签管理、章节编辑、作品编辑等
  */
 
 // ====================== Tab 切换 ======================
@@ -14,9 +14,9 @@ function switchCreateTab(tabName) {
     });
     document.getElementById(`panel-${tabName}`).classList.add('active');
 
-    // 切换到章节更新Tab时刷新作品列表
+    // 切换到章节更新Tab时从后端刷新作品列表
     if (tabName === 'chapter-update') {
-        renderChapterWorkList();
+        loadWorksFromBackend();
     }
 }
 
@@ -151,15 +151,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 const res = await API.createNovel(payload);
                 if (res.code === 201) {
                     showToast('作品创建成功！', 'success');
-                    // 将后端返回的作品加入本地列表
-                    addWorkToChapterList({
-                        id: res.data.id,
-                        name: res.data.title,
-                        novel_uuid: res.data.novel_uuid,
-                        tags: payload.tags,
-                        createdAt: res.data.created_at,
-                        chapters: []
-                    });
                     resetCreateForm();
                     switchCreateTab('chapter-update');
                 } else {
@@ -179,11 +170,36 @@ document.addEventListener('DOMContentLoaded', () => {
     if (searchInput) searchInput.addEventListener('input', () => renderChapterWorkList(searchInput.value));
 });
 
-// ====================== 章节更新 ======================
+// ====================== 从后端加载作品列表 ======================
 
 let createdWorks = [];
 
+async function loadWorksFromBackend() {
+    try {
+        const res = await API.listMyNovels();
+        if (res.code === 200 && res.data && res.data.items) {
+            createdWorks = res.data.items.map(n => ({
+                id: n.id,
+                novel_uuid: n.novel_uuid,
+                name: n.title,
+                tags: n.tags || [],
+                createdAt: n.created_at,
+                chapters: []
+            }));
+        } else {
+            createdWorks = [];
+        }
+    } catch (err) {
+        console.error('加载作品列表失败:', err);
+        showToast('加载作品列表失败', 'error');
+        createdWorks = [];
+    }
+    renderChapterWorkList();
+}
+
 function addWorkToChapterList(work) {
+    // 检查是否已存在（避免重复）
+    if (createdWorks.find(w => w.novel_uuid === work.novel_uuid)) return;
     createdWorks.push({
         id: work.id || Date.now(),
         novel_uuid: work.novel_uuid || '',
@@ -203,14 +219,327 @@ function renderChapterWorkList(filter = '') {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
             <p>${filter ? '未找到匹配作品' : '暂无作品'}</p>
             <span>${filter ? '请尝试其他关键词' : '请先在「新建作品」中创建作品'}</span>
-            ${!filter ? '<button type="button" class="btn btn-sm btn-primary" style="margin-top:16px;" onclick="switchCreateTab('new-work')">去新建作品</button>' : ''}
+            ${!filter ? '<button type="button" class="btn btn-sm btn-primary" style="margin-top:16px;" onclick="switchCreateTab(\'new-work\')">去新建作品</button>' : ''}
         </div>`;
         return;
     }
-    listEl.innerHTML = filtered.map(w => `<div class="chapter-work-item" onclick="selectWork(${w.id})"><div class="chapter-work-item-name">${escapeHtml(w.name)}</div><div class="chapter-work-item-meta"><span>${w.chapters.length} 个章节</span>${w.tags.length ? `<span>${w.tags.slice(0,3).join(' / ')}</span>` : ''}</div></div>`).join('');
+    listEl.innerHTML = filtered.map(w => `
+        <div class="chapter-work-item" onclick="selectWork(${w.id}, '${w.novel_uuid}')">
+            <div class="chapter-work-item-name">${escapeHtml(w.name)}</div>
+            <div class="chapter-work-item-meta">
+                <span>${w.chapters.length} 个章节</span>
+                ${w.tags.length ? `<span>${w.tags.slice(0,3).join(' / ')}</span>` : ''}
+            </div>
+        </div>
+    `).join('');
 }
 
-function selectWork(workId) {
+// ====================== 点击作品 → 打开编辑弹窗 ======================
+
+async function selectWork(workId, novelUuid) {
+    const work = createdWorks.find(w => w.id === workId);
+    if (!work) return;
+
+    // 高亮当前选中
+    document.querySelectorAll('.chapter-work-item').forEach(i => i.classList.remove('active'));
+    if (event && event.currentTarget) event.currentTarget.classList.add('active');
+
+    // 调用后端获取作品完整详情
+    showToast('正在加载作品详情...', 'info');
+    try {
+        const res = await API.getNovelForEdit(novelUuid);
+        if (res.code === 200 && res.data) {
+            openEditNovelModal(res.data);
+        } else {
+            showToast(res.message || '获取作品详情失败', 'error');
+        }
+    } catch (err) {
+        showToast('获取作品详情失败: ' + (err.message || '网络错误'), 'error');
+    }
+}
+
+// ====================== 作品编辑弹窗 ======================
+
+function openEditNovelModal(data) {
+    // 关闭已存在的弹窗
+    const existing = document.getElementById('editNovelModal');
+    if (existing) existing.remove();
+
+    // 处理标签
+    const tags = data.tags || [];
+
+    // 处理角色
+    const characters = data.characters || [];
+
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.id = 'editNovelModal';
+    overlay.innerHTML = `
+        <div class="modal" style="max-width:720px; width:90%; max-height:90vh; overflow-y:auto;">
+            <div class="modal-header">
+                <h3>编辑作品：${escapeHtml(data.title)}</h3>
+                <button class="modal-close" onclick="closeEditNovelModal()">&times;</button>
+            </div>
+            <div class="modal-body" style="padding:24px;">
+                <!-- 作品名称 -->
+                <div class="form-group" style="margin-bottom:16px;">
+                    <label for="editNovelTitle">
+                        作品名称 <span class="required">*</span>
+                    </label>
+                    <input type="text" id="editNovelTitle" value="${escapeHtml(data.title)}" maxlength="100" style="width:100%; padding:12px 16px; border:2px solid var(--border); border-radius:var(--radius-md); font-size:0.95rem;">
+                </div>
+
+                <!-- 目标读者类型 -->
+                <div class="form-group" style="margin-bottom:16px;">
+                    <label for="editNovelType">目标读者类型</label>
+                    <select id="editNovelType" style="width:100%; padding:12px 16px; border:2px solid var(--border); border-radius:var(--radius-md); font-size:0.95rem;">
+                        <option value="">请选择读者类型</option>
+                        <option value="male" ${data.novel_type === 'male' ? 'selected' : ''}>男频</option>
+                        <option value="female" ${data.novel_type === 'female' ? 'selected' : ''}>女频</option>
+                    </select>
+                </div>
+
+                <!-- 作品简介 -->
+                <div class="form-group" style="margin-bottom:16px;">
+                    <label for="editNovelSynopsis">
+                        作品简介 <span class="required">*</span>
+                    </label>
+                    <textarea id="editNovelSynopsis" rows="4" maxlength="2000" style="width:100%; padding:12px 16px; border:2px solid var(--border); border-radius:var(--radius-md); font-size:0.95rem; resize:vertical;">${escapeHtml(data.synopsis || '')}</textarea>
+                </div>
+
+                <!-- 故事背景 + 世界观设定 -->
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;">
+                    <div class="form-group">
+                        <label for="editNovelBackground">故事背景</label>
+                        <textarea id="editNovelBackground" rows="4" style="width:100%; padding:12px 16px; border:2px solid var(--border); border-radius:var(--radius-md); font-size:0.95rem; resize:vertical;">${escapeHtml(data.story_background || '')}</textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="editNovelWorld">世界观设定</label>
+                        <textarea id="editNovelWorld" rows="4" style="width:100%; padding:12px 16px; border:2px solid var(--border); border-radius:var(--radius-md); font-size:0.95rem; resize:vertical;">${escapeHtml(data.world_building || '')}</textarea>
+                    </div>
+                </div>
+
+                <!-- 角色 -->
+                <div class="form-group" style="margin-bottom:16px;">
+                    <label>人物关系</label>
+                    <div id="editCharacterList">
+                        ${characters.length === 0 ? `
+                        <div class="character-row">
+                            <input type="text" class="char-name" placeholder="角色名称" maxlength="30" style="padding:10px 14px; border:2px solid var(--border); border-radius:var(--radius-md);">
+                            <input type="text" class="char-desc" placeholder="角色描述" maxlength="200" style="padding:10px 14px; border:2px solid var(--border); border-radius:var(--radius-md);">
+                            <button type="button" class="btn-char-remove hidden" onclick="removeEditCharacter(this)" title="移除">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                            </button>
+                        </div>
+                        ` : characters.map((c, i) => `
+                        <div class="character-row">
+                            <input type="text" class="char-name" placeholder="角色名称" maxlength="30" value="${escapeHtml(c.name || '')}" style="padding:10px 14px; border:2px solid var(--border); border-radius:var(--radius-md);">
+                            <input type="text" class="char-desc" placeholder="角色描述" maxlength="200" value="${escapeHtml(c.description || '')}" style="padding:10px 14px; border:2px solid var(--border); border-radius:var(--radius-md);">
+                            <button type="button" class="btn-char-remove" onclick="removeEditCharacter(this)" title="移除">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                            </button>
+                        </div>
+                        `).join('')}
+                    </div>
+                    <button type="button" class="btn-add-character" onclick="addEditCharacter()" style="margin-top:8px;">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                        添加角色
+                    </button>
+                </div>
+
+                <!-- 标签 -->
+                <div class="form-group" style="margin-bottom:16px;">
+                    <label>作品标签</label>
+                    <div class="tag-input-wrapper" style="border:2px solid var(--border); border-radius:var(--radius-md); padding:8px 12px; min-height:44px; cursor:text;" onclick="document.getElementById('editTagInput').focus()">
+                        <div class="tag-container" id="editTagContainer">
+                            ${tags.map(t => `<span class="tag-item">${escapeHtml(t)}<button type="button" class="tag-remove" onclick="removeEditTag('${escapeHtml(t)}')" title="移除">&times;</button></span>`).join('')}
+                        </div>
+                        <input type="text" id="editTagInput" placeholder="输入标签后按 Enter 添加" maxlength="20" style="border:none; outline:none; flex:1; min-width:80px; font-size:0.95rem;">
+                    </div>
+                </div>
+
+                <!-- UUID (隐藏) -->
+                <input type="hidden" id="editNovelUuid" value="${escapeHtml(data.novel_uuid)}">
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline btn-sm" onclick="closeEditNovelModal()">取消</button>
+                <button class="btn btn-sm btn-danger" onclick="handleDeleteNovel()" style="margin-left:8px; background:var(--danger); color:#fff;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                    删除作品
+                </button>
+                <button class="btn btn-primary btn-sm" id="btnSaveEditNovel" onclick="handleSaveEditNovel()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    保存修改
+                </button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+
+    // 编辑弹窗中的标签输入逻辑
+    let editTags = [...tags];
+    window._editNovelTags = editTags;
+
+    const editTagInput = document.getElementById('editTagInput');
+    if (editTagInput) {
+        editTagInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const val = editTagInput.value.trim();
+                if (val && !editTags.includes(val) && editTags.length < MAX_TAGS) {
+                    editTags.push(val);
+                    renderEditTags();
+                    editTagInput.value = '';
+                }
+            }
+            if (e.key === 'Backspace' && !editTagInput.value && editTags.length > 0) {
+                editTags.pop();
+                renderEditTags();
+            }
+        });
+    }
+
+    window.renderEditTags = function() {
+        const container = document.getElementById('editTagContainer');
+        container.innerHTML = editTags.map(t => `<span class="tag-item">${escapeHtml(t)}<button type="button" class="tag-remove" onclick="removeEditTag('${escapeHtml(t)}')" title="移除">&times;</button></span>`).join('');
+    };
+
+    window.removeEditTag = function(tagText) {
+        const idx = editTags.indexOf(tagText);
+        if (idx > -1) editTags.splice(idx, 1);
+        renderEditTags();
+    };
+
+    // 点击蒙层关闭
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) closeEditNovelModal();
+    });
+}
+
+function addEditCharacter() {
+    const list = document.getElementById('editCharacterList');
+    const rows = list.querySelectorAll('.character-row');
+    rows.forEach(row => {
+        row.querySelector('.btn-char-remove').classList.remove('hidden');
+    });
+    const newRow = document.createElement('div');
+    newRow.className = 'character-row';
+    newRow.innerHTML = `
+        <input type="text" class="char-name" placeholder="角色名称" maxlength="30" style="padding:10px 14px; border:2px solid var(--border); border-radius:var(--radius-md);">
+        <input type="text" class="char-desc" placeholder="角色描述" maxlength="200" style="padding:10px 14px; border:2px solid var(--border); border-radius:var(--radius-md);">
+        <button type="button" class="btn-char-remove" onclick="removeEditCharacter(this)" title="移除">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+    `;
+    list.appendChild(newRow);
+    newRow.querySelector('.char-name').focus();
+}
+
+function removeEditCharacter(btn) {
+    const list = document.getElementById('editCharacterList');
+    const rows = list.querySelectorAll('.character-row');
+    if (rows.length <= 1) {
+        const row = rows[0];
+        row.querySelector('.char-name').value = '';
+        row.querySelector('.char-desc').value = '';
+        btn.classList.add('hidden');
+        return;
+    }
+    btn.closest('.character-row').remove();
+    const remainingRows = list.querySelectorAll('.character-row');
+    if (remainingRows.length === 1) {
+        remainingRows[0].querySelector('.btn-char-remove').classList.add('hidden');
+    }
+}
+
+function closeEditNovelModal() {
+    const modal = document.getElementById('editNovelModal');
+    if (modal) modal.remove();
+    window._editNovelTags = null;
+}
+
+// ====================== 保存编辑作品 ======================
+
+async function handleSaveEditNovel() {
+    const novelUuid = document.getElementById('editNovelUuid').value;
+    const title = document.getElementById('editNovelTitle').value.trim();
+    const synopsis = document.getElementById('editNovelSynopsis').value.trim();
+
+    if (!title) { showToast('作品名称不能为空', 'warning'); return; }
+    if (!synopsis) { showToast('作品简介不能为空', 'warning'); return; }
+
+    // 收集角色
+    const characters = [];
+    document.querySelectorAll('#editCharacterList .character-row').forEach(row => {
+        const n = row.querySelector('.char-name').value.trim();
+        const d = row.querySelector('.char-desc').value.trim();
+        if (n) characters.push({ name: n, description: d });
+    });
+
+    // 构建请求
+    const payload = {
+        title: title,
+        synopsis: synopsis,
+        novel_type: document.getElementById('editNovelType').value || null,
+        tags: window._editNovelTags || [],
+        story_background: document.getElementById('editNovelBackground').value.trim() || null,
+        world_building: document.getElementById('editNovelWorld').value.trim() || null,
+        characters: characters,
+    };
+
+    const btn = document.getElementById('btnSaveEditNovel');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;"></span> 保存中...';
+
+    try {
+        const res = await API.updateNovel(novelUuid, payload);
+        if (res.code === 200) {
+            showToast('作品修改成功！', 'success');
+            closeEditNovelModal();
+            // 刷新作品列表
+            loadWorksFromBackend();
+        } else {
+            showToast(res.message || '修改失败', 'warning');
+        }
+    } catch (err) {
+        showToast('修改失败: ' + (err.message || '网络错误'), 'error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = `
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            保存修改
+        `;
+    }
+}
+
+// ====================== 删除作品 ======================
+
+async function handleDeleteNovel() {
+    const novelUuid = document.getElementById('editNovelUuid').value;
+    const title = document.getElementById('editNovelTitle').value.trim();
+
+    if (!confirm(`确定要删除作品「${title}」吗？此操作不可撤销！`)) {
+        return;
+    }
+
+    try {
+        const res = await API.deleteNovel(novelUuid);
+        if (res.code === 200) {
+            showToast('作品已删除', 'success');
+            closeEditNovelModal();
+            // 刷新作品列表
+            loadWorksFromBackend();
+        } else {
+            showToast(res.message || '删除失败', 'warning');
+        }
+    } catch (err) {
+        showToast('删除失败: ' + (err.message || '网络错误'), 'error');
+    }
+}
+
+// ====================== 章节更新（保持原有章节编辑逻辑） ======================
+
+function selectWorkForChapter(workId) {
     const work = createdWorks.find(w => w.id === workId);
     if (!work) return;
     document.querySelectorAll('.chapter-work-item').forEach(i => i.classList.remove('active'));
@@ -387,7 +716,6 @@ function saveChapterDetail(btn) {
     ch.skills = collectMultiRows(inner, 'skills');
     ch._saved = true;
 
-    // 更新卡片头部信息
     const card = inner.closest('.chapter-card');
     const titleEl = card.querySelector('.chapter-card-title');
     const metaEl = card.querySelector('.chapter-card-meta');
@@ -429,7 +757,6 @@ function generateChapter(btn) {
     const ch = work ? work.chapters.find(c => c.id === chapterId) : null;
     if (!ch) return;
 
-    // 读取当前表单数据
     const title = inner.querySelector('[data-field="title"]').value.trim();
     const storyline = inner.querySelector('[data-field="storyline"]').value.trim();
     const event = inner.querySelector('[data-field="event"]').value.trim();
@@ -442,14 +769,12 @@ function generateChapter(btn) {
     if (!title) { showToast('请先填写章节名称', 'warning'); return; }
     if (!storyline && !event) { showToast('请至少填写章节剧情线或核心事件', 'warning'); return; }
 
-    // 按钮加载态
     const btnText = btn.querySelector('.btn-ai-text');
     const spinner = btn.querySelector('.spinner');
     btn.disabled = true;
     btnText.textContent = '生成中...';
     spinner.classList.remove('hidden');
 
-    // 模拟AI生成（实际应调用后端API）
     setTimeout(() => {
         _previewGeneratedText = mockAIGenerate({
             title, storyline, event, wordCount,
@@ -461,7 +786,6 @@ function generateChapter(btn) {
         btnText.textContent = '一键生成';
         spinner.classList.add('hidden');
 
-        // 打开预览弹窗
         _previewWorkId = workId;
         _previewChapterId = chapterId;
         openChapterPreview(title, wordCount, event, _previewGeneratedText);
@@ -474,26 +798,17 @@ function mockAIGenerate(ctx) {
     const locs = locations.map(l => l.name).join('、') || '故事发生地';
     const sks = skills.map(s => s.name).join('、') || '相关能力';
 
-    // 生成模拟正文（实际应由AI后端生成）
     const paraCount = Math.max(3, Math.floor(wordCount / 400));
-    let text = `${title}
-
-`;
-    text += `${storyline || event}
-
-`;
+    let text = `${title}\n\n`;
+    text += `${storyline || event}\n\n`;
 
     for (let i = 1; i <= paraCount; i++) {
         text += `　　${locs}的风吹过，${chars}站在那里，目光深邃。${sks}在指尖流转，空气中弥漫着紧张的气息。`;
         if (event) text += `这一章，正是${event.substring(0, 20)}的关键时刻。`;
-        text += `周围的景物在${sks}的映照下显得格外不同，仿佛整个世界都在等待这一刻的到来。
-
-`;
+        text += `周围的景物在${sks}的映照下显得格外不同，仿佛整个世界都在等待这一刻的到来。\n\n`;
     }
 
-    text += `　　故事还在继续，下一章将更加精彩……
-
-`;
+    text += `　　故事还在继续，下一章将更加精彩……\n\n`;
     text += `【本章节为AI一键生成预览，字数约 ${wordCount} 字。确认发布后正式写入作品。】`;
     return text;
 }
@@ -522,7 +837,6 @@ function confirmPublishFromPreview() {
     const ch = work ? work.chapters.find(c => c.id === _previewChapterId) : null;
     if (!ch) return;
 
-    // 将预览内容写入章节
     const card = document.querySelector(`.chapter-card[data-chapter-id="${_previewChapterId}"]`);
     if (card) {
         const contentArea = card.querySelector('[data-field="content"]');
@@ -533,7 +847,6 @@ function confirmPublishFromPreview() {
     ch._saved = true;
     ch._published = true;
 
-    // 更新卡片状态
     if (card) {
         const statusEl = card.querySelector('.chapter-card-status');
         if (statusEl) { statusEl.textContent = '已发布'; statusEl.className = 'chapter-card-status saved'; }
@@ -544,7 +857,7 @@ function confirmPublishFromPreview() {
     renderChapterWorkList();
 }
 
-// ====================== 发布章节（直接发布） ======================
+// ====================== 发布章节 ======================
 
 function publishChapter(btn) {
     const inner = btn.closest('.chapter-detail-inner');
@@ -559,7 +872,6 @@ function publishChapter(btn) {
 
     if (!title) { showToast('请先填写章节名称', 'warning'); return; }
 
-    // 收集所有数据
     ch.title = title;
     ch.storyline = inner.querySelector('[data-field="storyline"]').value.trim();
     ch.event = inner.querySelector('[data-field="event"]').value.trim();
@@ -572,7 +884,6 @@ function publishChapter(btn) {
     ch._saved = true;
     ch._published = true;
 
-    // 更新卡片头部
     const card = inner.closest('.chapter-card');
     const titleEl = card.querySelector('.chapter-card-title');
     const metaEl = card.querySelector('.chapter-card-meta');
@@ -589,17 +900,23 @@ function publishChapter(btn) {
 document.addEventListener('click', (e) => {
     const modal = document.getElementById('chapterPreviewModal');
     if (e.target === modal) closeChapterPreview();
+    // ESC 关闭编辑弹窗
+    const editModal = document.getElementById('editNovelModal');
+    if (e.target === editModal) closeEditNovelModal();
 });
 
 // ESC 关闭弹窗
 document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') closeChapterPreview();
+    if (e.key === 'Escape') {
+        closeChapterPreview();
+        closeEditNovelModal();
+    }
 });
 
 function addNewChapter() {
     const activeItem = document.querySelector('.chapter-work-item.active');
     if (!activeItem) { showToast('请先选择一部作品', 'warning'); return; }
-    const match = activeItem.getAttribute('onclick').match(/selectWork\((\d+)\)/);
+    const match = activeItem.getAttribute('onclick').match(/selectWork\((\d+)/);
     if (!match) return;
     const work = createdWorks.find(w => w.id === parseInt(match[1]));
     if (!work) return;
@@ -624,9 +941,6 @@ function addNewChapter() {
     const area = document.getElementById('chapterListArea');
     setTimeout(() => area.scrollTop = area.scrollHeight, 100);
 }
-
-function updateChapterTitle(wid, cid, val) { const w = createdWorks.find(x=>x.id===wid); if(w){ const c=w.chapters.find(x=>x.id===cid); if(c) c.title=val.trim(); } }
-function updateChapterContent(wid, cid, val) { const w = createdWorks.find(x=>x.id===wid); if(w){ const c=w.chapters.find(x=>x.id===cid); if(c) c.content=val; } }
 
 function deleteChapter(workId, chapterId) {
     const work = createdWorks.find(w => w.id === workId);

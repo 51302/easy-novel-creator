@@ -4,7 +4,7 @@
  */
 const API = (() => {
     // 后端地址（开发环境）
-    const BASE_URL = 'http://127.0.0.1:8001/api/v1';
+    const BASE_URL = 'http://127.0.0.1:8000/api/v1';
 
     // Token 管理
     const TOKEN_KEY = 'auth_token';
@@ -69,6 +69,11 @@ const API = (() => {
         const data = await response.json();
 
         if (!response.ok) {
+            // 如果是401未授权错误，清除认证信息并跳转到登录页面
+            if (response.status === 401) {
+                clearAuth();
+                window.location.href = 'index.html';
+            }
             throw new Error(data.detail || data.message || '请求失败');
         }
 
@@ -154,9 +159,19 @@ const API = (() => {
             return await request('GET', '/novels/');
         },
 
-        /** 获取作品详情 */
-        async getNovel(novelUuid) {
-            return await request('GET', `/novels/${novelUuid}`);
+        /** 获取作品详情（编辑用） */
+        async getNovelForEdit(novelUuid) {
+            return await request('GET', `/novels/${novelUuid}/edit`);
+        },
+
+        /** 修改作品 */
+        async updateNovel(novelUuid, data) {
+            return await request('PUT', `/novels/${novelUuid}`, data);
+        },
+
+        /** 删除作品 */
+        async deleteNovel(novelUuid) {
+            return await request('DELETE', `/novels/${novelUuid}`);
         },
 
         // 工具方法

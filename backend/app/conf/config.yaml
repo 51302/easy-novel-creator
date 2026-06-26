@@ -54,6 +54,21 @@ jwt:
   # Token 过期时间（分钟）
   access_token_expire_minutes: 60
 
+# MongoDB 配置
+mongodb:
+  host: 127.0.0.1
+  port: 27017
+  user: admin
+  password: admin123
+  database: novel_db
+
+# Redis 配置
+redis:
+  host: 127.0.0.1
+  port: 6379
+  password: novel123redis
+  db: 0
+
 # CORS 配置
 cors:
   # 允许的跨域来源
