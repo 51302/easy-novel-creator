@@ -55,8 +55,8 @@ class UserResponse(BaseModel):
     email:      Optional[str] = None
     phone:      Optional[str] = None
     superuser:  int
-    created_at: Optional[str] = None
-    updated_at: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

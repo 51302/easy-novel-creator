@@ -9,7 +9,7 @@ import yaml
 
 def load_yaml_config():
     """加载 YAML 配置文件"""
-    config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "config.yaml")
+    config_path = os.path.join(os.path.dirname(__file__), "conf", "config.yaml")
     if os.path.exists(config_path):
         with open(config_path, 'r', encoding='utf-8') as f:
             return yaml.safe_load(f)

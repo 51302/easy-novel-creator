@@ -97,3 +97,7 @@ if __name__ == "__main__":
         port=settings.PORT,
         reload=settings.DEBUG,
     )
+
+# ====================== UV 启动支持 ======================
+# 使用 uv 启动命令：
+# uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload

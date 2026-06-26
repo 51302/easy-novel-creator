@@ -734,6 +734,7 @@ a:hover {
 .stat-card-icon.green { background: var(--success-bg); color: var(--success); }
 .stat-card-icon.orange { background: var(--warning-bg); color: var(--warning); }
 .stat-card-icon.red   { background: var(--danger-bg); color: var(--danger); }
+.stat-card-icon.purple { background: var(--info-bg); color: var(--info); }
 
 .stat-card-icon svg {
     width: 20px;
